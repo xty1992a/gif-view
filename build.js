@@ -4,6 +4,8 @@ const root = (_path) => path.resolve(__dirname, _path)
 const cheerio = require('cheerio')
 const shell = require('shelljs')
 
+console.log(process.argv)
+
 const toArray = $List => {
   const result = []
   $List.each((i, n) => result.push(n))
@@ -38,13 +40,17 @@ async function run() {
       })
 
   // 保存更改过引用的html
+
+
   const html = $.html()
   await fs.writeFile(root('dist/index.html'), html, 'utf-8')
 
   // 搬运其他的依赖
   shell.cd('..')
-  shell.cp('src/logo.png', 'dist/')
+  shell.cp('src/gif.png', 'dist/')
   shell.cp('src/plugin.json', 'dist/')
+
+  console.log('编译完成！')
 }
 
 run()

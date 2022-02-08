@@ -106,6 +106,7 @@
       height: 100%;
 
       opacity: 0.01;
+      cursor: pointer;
     }
 
     img {
@@ -118,23 +119,20 @@
 <body>
 
 <div id="app" v-cloak>
-
-  <div class="playground center-box">
+  <div class="playground center-box" :style="`aspect-ratio: ${ratio}`">
     <img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="" ref="img">
-    <input type="file" @change="onLoadFile">
+    <input type="file" @change="onLoadFile" accept="image/gif">
     <div class="placeholder center-box" v-if="!gifEnable">拖动GIF图片到此处，暂停时可按键逐帧播放</div>
     <div class="count-bar center-box" v-if="playState===0">{{ indexText }}</div>
   </div>
   <div class="btn-group center-box">
-    <el-button @click="frameTo(-1)" :disabled="!movable"><</el-button>
-    <el-button @click="switchPlay" :disabled="!gifEnable">{{ stateText }}</el-button>
-    <el-button @click="frameTo(1)" :disabled="!movable">></el-button>
+    <el-button title="快捷键：<" @click="frameTo(-1)" :disabled="!movable"><</el-button>
+    <el-button title="快捷键：空格" @click="switchPlay" :disabled="!gifEnable">{{ stateText }}</el-button>
+    <el-button title="快捷键：>" @click="frameTo(1)" :disabled="!movable">></el-button>
+    <el-button title="快捷键：Enter" @click="downloadFrames" :disabled="!gifEnable">导出</el-button>
   </div>
-
   <div class="btn-group center-box">
-    <el-button @click="downloadFrames" :disabled="!gifEnable">导出</el-button>
   </div>
-
 </div>
 
 
@@ -151,7 +149,7 @@
         total: 0,
         current: 0,
 
-        imgs: []
+        ratio: 1.6,
       }
     },
     computed: {
@@ -188,17 +186,20 @@
 
     methods: {
       listenKeyPress() {
-        const next = this.frameTo.bind(null, 1)
-        const prev = this.frameTo.bind(null, -1)
+        const next = this.frameTo.bind(this, 1)
+        const prev = this.frameTo.bind(this, -1)
         const keyMap = {
-          'ArrowRight': next,
-          'ArrowDown': next,
-          'ArrowUp': prev,
-          'ArrowLeft': prev,
+          ArrowRight: next,
+          ArrowDown: next,
+          ArrowUp: prev,
+          ArrowLeft: prev,
+          Space: this.switchPlay,
+          Enter: this.downloadFrames
         }
-
         document.onkeydown = e => {
-          keyMap[e.key]?.call()
+          e.preventDefault()
+          console.log(e.code)
+          keyMap[e.code]?.call(this)
         }
       },
 
@@ -229,6 +230,8 @@
       },
 
       switchPlay() {
+        if (!this.gifEnable) return
+
         this.playState = this.playState === 1 ? 0 : 1
       },
 
@@ -238,6 +241,12 @@
         if (!/\.gif$/.test(file.name)) return error('仅支持GIF图片')
 
         const url = createUrl(file)
+
+        const img = await createImage(url)
+        if (img) {
+          this.ratio = img.width / img.height
+        }
+
         e.target.value = null
         this.total = 0
         const gif = await this.createGif()
@@ -249,6 +258,7 @@
       },
 
       async downloadFrames() {
+        if (!this.gifEnable) return
         try{
           const cvs = this.gif.get_canvas()
           this.gif.move_to(this.total-1)

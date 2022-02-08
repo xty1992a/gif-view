@@ -1,8 +1,8 @@
 {
   "main": "index.html",
-  "logo": "logo.svg",
+  "logo": "gif.png",
   "development": {
-    "main": "http://10.9.48.31:63299/dist/index.html"
+    "main": "http://localhost:8080/dist/index.html"
   },
   "features": [
     {
