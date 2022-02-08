@@ -7,6 +7,7 @@
   <script type="text/javascript" src="../node_modules/vue/dist/vue.js"></script>
   <script type="text/javascript" src="../node_modules/element-ui/lib/index.js"></script>
   <script type="text/javascript" src="../node_modules/jszip/dist/jszip.min.js"></script>
+  <script type="text/javascript" src="../node_modules/tiny-emitter/dist/tinyemitter.min.js"></script>
   <link rel="stylesheet" href="../node_modules/element-ui/lib/theme-chalk/index.css">
 
   <script type="text/javascript">
@@ -32,12 +33,38 @@
     const sleep = time => new Promise(resolve => setTimeout(resolve, time))
 
     const download = (href, filename) => {
-      const eleLink = document.createElement('a');
-      eleLink.download = filename;
+      const eleLink = document.createElement('a')
+      eleLink.download = filename
       eleLink.href = href
-      eleLink.click();
+      eleLink.click()
     }
 
+    const { Message, Loading } = ELEMENT
+    const error = Message.error
+
+    const loading = msg => {
+      const ins = Loading.service({
+        fullscreen: true,
+        text: msg,
+      })
+
+      return ins.close.bind(ins)
+    }
+
+  </script>
+
+  <script type="text/javascript">
+    const event_bus = new TinyEmitter()
+
+    function listen() {
+      if (!window.utools) return
+      utools.onPluginEnter(() => {
+        console.log('enter!', utools.getCopyedFiles())
+        event_bus.emit('enter')
+      })
+    }
+
+    listen()
   </script>
 
   <style>
@@ -45,7 +72,7 @@
       display: none;
     }
 
-    body{
+    body {
       margin: 0;
     }
 
@@ -53,7 +80,7 @@
       box-sizing: border-box;
     }
 
-    #app{
+    #app {
       padding-top: 10px;
     }
 
@@ -79,7 +106,7 @@
       padding: 0 5px;
     }
 
-    .placeholder{
+    .placeholder {
       position: absolute;
       bottom: 0;
       right: 0;
@@ -89,7 +116,7 @@
     }
 
     .btn-group {
-      padding-bottom:  30px;
+      padding-bottom: 30px;
     }
 
     .center-box {
@@ -113,7 +140,59 @@
       width: 100%;
       height: 100%;
     }
+
+    #bucket {
+      overflow: hidden;
+      width: 0;
+      height: 0;
+      opacity: 0;
+    }
   </style>
+
+  <script type="text/javascript">
+    async function getGIFFrames(url) {
+      const list = []
+      const bucket = document.createElement('div')
+      const img = new Image()
+      bucket.appendChild(img)
+      document.body.appendChild(bucket)
+
+      const gif = new SuperGif({
+        gif: img,
+        auto_play: 0,
+      })
+
+      await new Promise(r => gif.load_url(url, r))
+
+      for (let i = 1; i <= gif.get_length(); i++) {
+        gif.move_to(i)
+        list.push(
+            gif.get_canvas()
+                .toDataURL('image/jpeg', 1),
+        )
+      }
+      console.log(list[0] === list[1])
+
+      bucket.remove()
+      return list
+    }
+
+    async function zipFile(imgList) {
+      const list = [...imgList]
+      let index = 0
+      while (list.length) {
+        const now = list.shift()
+        const zip = new JSZip()
+        zip.file(`${ index++ }.jpg`, now.replace(/^data:image\/(png|jpe?g|gif);base64,/, ''), { base64: true })
+      }
+      const content = await zip.generateAsync({ type: 'blob' })
+
+      const filename = 'now' + '.zip'
+      const href = URL.createObjectURL(content)
+      download(href, filename)
+      URL.revokeObjectURL(eleLink.href)
+    }
+  </script>
 
 </head>
 <body>
@@ -126,39 +205,41 @@
     <el-button title="快捷键：Enter" @click="downloadFrames" :disabled="!gifEnable">导出</el-button>
   </div>
   <div class="playground center-box" :style="`aspect-ratio: ${ratio}`">
-    <img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="" ref="img">
+    <img :src="currentUrl" alt="" ref="img">
     <input type="file" @change="onLoadFile" accept="image/gif">
     <div class="placeholder center-box" v-if="!gifEnable">拖动GIF图片到此处，暂停时可按键逐帧播放</div>
-    <div class="count-bar center-box" v-if="playState===0">{{ indexText }}</div>
+    <div class="count-bar center-box" v-if="!playing">{{ indexText }}</div>
   </div>
 </div>
 
-
+<div id="bucket"></div>
 <script type="text/javascript">
-  const {Message} = ELEMENT
-  const error = Message.error
 
   new Vue({
     el: '#app',
     data() {
       return {
-        url: '',
-        playState: 0,
-        total: 0,
+        playing: false,
         current: 0,
-
         ratio: 1.6,
+        imgList: ['data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'],
       }
     },
     computed: {
+      total() {
+        return this.imgList.length
+      },
+      currentUrl() {
+        return this.imgList[this.current]
+      },
       gifEnable() {
-        return this.total !== 0
+        return this.total > 1
       },
       movable() {
-        return this.gifEnable && this.playState === 0
+        return this.gifEnable && !this.playing
       },
       stateText() {
-        return ['播放', '暂停'][this.playState]
+        return ['播放', '暂停'][+this.playing]
       },
       indexText() {
         if (!this.total) return '-/-'
@@ -167,13 +248,13 @@
     },
 
     watch: {
-      playState(now) {
+      playing(now) {
         if (now) {
-          this.gif.play()
+          this.stop = this.play()
         }
         else {
-          this.current = this.gif.get_current_frame()
-          this.gif.pause()
+          this.stop && this.stop()
+          this.stop = undefined
         }
       },
     },
@@ -183,6 +264,30 @@
     },
 
     methods: {
+
+      play() {
+        let stop = false
+
+        const frame = () => {
+          this.current++
+          if (this.current === this.total) {
+            this.current = 0
+          }
+        }
+
+        async function loop() {
+          while (!stop) {
+            await sleep(100)
+            frame()
+          }
+        }
+
+        loop()
+        return () => {
+          stop = true
+        }
+      },
+
       listenKeyPress() {
         const next = this.frameTo.bind(this, 1)
         const prev = this.frameTo.bind(this, -1)
@@ -192,90 +297,85 @@
           ArrowUp: prev,
           ArrowLeft: prev,
           Space: this.switchPlay,
-          Enter: this.downloadFrames
+          Enter: this.downloadFrames,
         }
         document.onkeydown = e => {
           e.preventDefault()
-          console.log(e.code)
           keyMap[e.code]?.call(this)
         }
       },
 
-      async createGif() {
+      async createGif(img) {
+        const bucket = document.getElementById('bucket')
+        bucket.innerHTML = ''
+        bucket.appendChild(img)
         if (!this.gif) {
           await sleep(20)
-          const img = this.$refs['img']
-          if (!img) return
-          this.gif = new SuperGif({ gif: img, auto_play: this.playState, progressbar_height: 0 })
+          this.gif = new SuperGif({
+            gif: img,
+            auto_play: 0,
+          })
         }
 
         return this.gif
       },
 
       frameTo(directive) {
-        if (!this.gifEnable) return
+        if (!this.movable) return
         // 倒放到第一帧
         const moveToLasted = this.current === 0 && directive === -1
 
+        const moveToFirst = this.current === this.total - 1
+
         if (moveToLasted) {
-          this.gif.move_to(this.total - 1)
+          this.current = this.total - 1
+        }
+        else if (moveToFirst) {
+          this.current = 0
         }
         else {
-          this.gif.move_relative(directive)
+          this.current += directive
         }
-
-        this.current = this.gif.get_current_frame()
       },
 
       switchPlay() {
         if (!this.gifEnable) return
-
-        this.playState = this.playState === 1 ? 0 : 1
+        this.playing = !this.playing
       },
 
-      async onLoadFile(e) {
+      onLoadFile(e) {
         const [file] = e.target.files
         if (!file) return
         if (!/\.gif$/.test(file.name)) return error('仅支持GIF图片')
 
-        const url = createUrl(file)
+        const close = loading('处理中...')
+        this.handleGIFFile(file)
+            .finally(() => {
+              e.target.value = null
+              close()
+            })
+      },
 
+      async handleGIFFile(file) {
+        const url = createUrl(file)
         const img = await createImage(url)
         if (img) {
           this.ratio = img.width / img.height
         }
 
-        e.target.value = null
-        this.total = 0
-        const gif = await this.createGif()
-
-        if (!gif) return
-        await new Promise(r => gif.load_url(url, r))
-        this.current = gif.get_current_frame()
-        this.total = gif.get_length()
+        this.imgList = await getGIFFrames(url)
+        this.current = 0
+        this.playing = true
       },
 
       async downloadFrames() {
         if (!this.gifEnable) return
-        try{
-          const cvs = this.gif.get_canvas()
-          this.gif.move_to(this.total-1)
-          const zip = new JSZip()
-          let total = this.total
-          while (total--) {
-            this.gif.move_relative(-1)
-            const now = cvs.toDataURL('image/jpeg')
-            zip.file(`${total+1}.jpg`, now.replace(/^data:image\/(png|jpe?g|gif);base64,/, ""), {base64: true})
-          }
-          this.current = 0
-          const content = await zip.generateAsync({type:"blob"})
-          const filename = 'now' + '.zip';
-          const href = URL.createObjectURL(content)
-          download(href, filename)
-          URL.revokeObjectURL(eleLink.href)
-        }catch (e) {
+        try {
+          await zipFile(this.imgList)
+        } catch (e) {
+          console.log(e)
         }
-      }
+      },
     },
   })
 </script>

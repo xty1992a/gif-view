@@ -8,7 +8,16 @@
     {
       "code": "gif",
       "explain": "preview gif frame by frame",
-      "cmds":["gif", "动图"]
+      "cmds": [
+        {
+          "type": "files",
+          "label": "GIF预览",
+          "fileType": "file",
+          "minLength": 1
+        },
+        "GIF",
+        "图片"
+      ]
     }
   ]
 }

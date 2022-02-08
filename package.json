@@ -14,6 +14,7 @@
     "element-ui": "^2.15.6",
     "jszip": "^3.7.1",
     "libgif": "^0.0.3",
+    "tiny-emitter": "^2.1.0",
     "vue": "2.6"
   },
   "devDependencies": {
