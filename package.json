@@ -1,0 +1,23 @@
+{
+  "name": "bash-proxy",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "build": "node build.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "element-ui": "^2.15.6",
+    "jszip": "^3.7.1",
+    "libgif": "^0.0.3",
+    "vue": "2.6"
+  },
+  "devDependencies": {
+    "cheerio": "^1.0.0-rc.10",
+    "nodemon": "^2.0.15",
+    "shelljs": "^0.8.5"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "main": "index.html",
+  "logo": "logo.svg",
+  "development": {
+    "main": "http://10.9.48.31:63299/dist/index.html"
+  },
+  "features": [
+    {
+      "code": "gif",
+      "explain": "preview gif frame by frame",
+      "cmds":["gif", "动图"]
+    }
+  ]
+}

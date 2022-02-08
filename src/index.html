@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>gif viewer</title>
+  <script type="text/javascript" src="../node_modules/libgif/libgif.js"></script>
+  <script type="text/javascript" src="../node_modules/vue/dist/vue.js"></script>
+  <script type="text/javascript" src="../node_modules/element-ui/lib/index.js"></script>
+  <script type="text/javascript" src="../node_modules/jszip/dist/jszip.min.js"></script>
+  <link rel="stylesheet" href="../node_modules/element-ui/lib/theme-chalk/index.css">
+
+  <script type="text/javascript">
+    function createImage(url) {
+
+      return new Promise(resolve => {
+        const img = new Image()
+        img.onload = resolve.bind(null, img)
+        img.onerror = resolve.bind(null, null)
+        img.src = url
+      })
+    }
+
+    const createUrl = (function () {
+      let url
+      return function (blob) {
+        url && URL.revokeObjectURL(url)
+        url = URL.createObjectURL(blob)
+        return url
+      }
+    })()
+
+    const sleep = time => new Promise(resolve => setTimeout(resolve, time))
+
+    const download = (href, filename) => {
+      const eleLink = document.createElement('a');
+      eleLink.download = filename;
+      eleLink.href = href
+      eleLink.click();
+    }
+
+  </script>
+
+  <style>
+    [v-cloak] {
+      display: none;
+    }
+
+    body{
+      margin: 0;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    #app{
+      padding-top: 50px;
+    }
+
+    .playground {
+      margin: 0 auto;
+      background-color: #f7f7f7;
+      aspect-ratio: 1.6;
+      min-width: 300px;
+      max-width: 500px;
+      position: relative;
+    }
+
+    .count-bar {
+      position: absolute;
+      bottom: 10px;
+      right: 10px;
+
+      background-color: rgba(0, 0, 0, 0.8);
+      color: #fff;
+      font-size: 12px;
+      height: 18px;
+      border-radius: 9px;
+      padding: 0 5px;
+    }
+
+    .placeholder{
+      position: absolute;
+      bottom: 0;
+      right: 0;
+      top: 0;
+      left: 0;
+      pointer-events: none;
+    }
+
+    .btn-group {
+      padding-top: 20px;
+    }
+
+    .center-box {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    [type="file"] {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+
+      opacity: 0.01;
+    }
+
+    img {
+      width: 100%;
+      height: 100%;
+    }
+  </style>
+
+</head>
+<body>
+
+<div id="app" v-cloak>
+
+  <div class="playground center-box">
+    <img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="" ref="img">
+    <input type="file" @change="onLoadFile">
+    <div class="placeholder center-box" v-if="!gifEnable">拖动GIF图片到此处，暂停时可按键逐帧播放</div>
+    <div class="count-bar center-box" v-if="playState===0">{{ indexText }}</div>
+  </div>
+  <div class="btn-group center-box">
+    <el-button @click="frameTo(-1)" :disabled="!movable"><</el-button>
+    <el-button @click="switchPlay" :disabled="!gifEnable">{{ stateText }}</el-button>
+    <el-button @click="frameTo(1)" :disabled="!movable">></el-button>
+  </div>
+
+  <div class="btn-group center-box">
+    <el-button @click="downloadFrames" :disabled="!gifEnable">导出</el-button>
+  </div>
+
+</div>
+
+
+<script type="text/javascript">
+  const {Message} = ELEMENT
+  const error = Message.error
+
+  new Vue({
+    el: '#app',
+    data() {
+      return {
+        url: '',
+        playState: 0,
+        total: 0,
+        current: 0,
+
+        imgs: []
+      }
+    },
+    computed: {
+      gifEnable() {
+        return this.total !== 0
+      },
+      movable() {
+        return this.gifEnable && this.playState === 0
+      },
+      stateText() {
+        return ['播放', '暂停'][this.playState]
+      },
+      indexText() {
+        if (!this.total) return '-/-'
+        return [this.current + 1, this.total].join('/')
+      },
+    },
+
+    watch: {
+      playState(now) {
+        if (now) {
+          this.gif.play()
+        }
+        else {
+          this.current = this.gif.get_current_frame()
+          this.gif.pause()
+        }
+      },
+    },
+
+    created() {
+      this.listenKeyPress()
+    },
+
+    methods: {
+      listenKeyPress() {
+        const next = this.frameTo.bind(null, 1)
+        const prev = this.frameTo.bind(null, -1)
+        const keyMap = {
+          'ArrowRight': next,
+          'ArrowDown': next,
+          'ArrowUp': prev,
+          'ArrowLeft': prev,
+        }
+
+        document.onkeydown = e => {
+          keyMap[e.key]?.call()
+        }
+      },
+
+      async createGif() {
+        if (!this.gif) {
+          await sleep(20)
+          const img = this.$refs['img']
+          if (!img) return
+          this.gif = new SuperGif({ gif: img, auto_play: this.playState, progressbar_height: 0 })
+        }
+
+        return this.gif
+      },
+
+      frameTo(directive) {
+        if (!this.gifEnable) return
+        // 倒放到第一帧
+        const moveToLasted = this.current === 0 && directive === -1
+
+        if (moveToLasted) {
+          this.gif.move_to(this.total - 1)
+        }
+        else {
+          this.gif.move_relative(directive)
+        }
+
+        this.current = this.gif.get_current_frame()
+      },
+
+      switchPlay() {
+        this.playState = this.playState === 1 ? 0 : 1
+      },
+
+      async onLoadFile(e) {
+        const [file] = e.target.files
+        if (!file) return
+        if (!/\.gif$/.test(file.name)) return error('仅支持GIF图片')
+
+        const url = createUrl(file)
+        e.target.value = null
+        this.total = 0
+        const gif = await this.createGif()
+
+        if (!gif) return
+        await new Promise(r => gif.load_url(url, r))
+        this.current = gif.get_current_frame()
+        this.total = gif.get_length()
+      },
+
+      async downloadFrames() {
+        try{
+          const cvs = this.gif.get_canvas()
+          this.gif.move_to(this.total-1)
+          const zip = new JSZip()
+          let total = this.total
+          while (total--) {
+            this.gif.move_relative(-1)
+            const now = cvs.toDataURL('image/jpeg')
+            zip.file(`${total+1}.jpg`, now.replace(/^data:image\/(png|jpe?g|gif);base64,/, ""), {base64: true})
+          }
+          this.current = 0
+          const content = await zip.generateAsync({type:"blob"})
+          const filename = 'now' + '.zip';
+          const href = URL.createObjectURL(content)
+          download(href, filename)
+          URL.revokeObjectURL(eleLink.href)
+        }catch (e) {
+        }
+      }
+    },
+  })
+</script>
+
+</body>
+</html>
