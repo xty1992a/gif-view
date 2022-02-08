@@ -48,6 +48,7 @@ async function run() {
   // 搬运其他的依赖
   shell.cd('..')
   shell.cp('src/gif.png', 'dist/')
+  shell.cp('src/preload.js', 'dist/')
   shell.cp('src/plugin.json', 'dist/')
 
   console.log('编译完成！')

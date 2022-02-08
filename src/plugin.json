@@ -1,6 +1,7 @@
 {
   "main": "index.html",
   "logo": "gif.png",
+  "preload": "preload.js",
   "development": {
     "main": "http://localhost:8080/dist/index.html"
   },

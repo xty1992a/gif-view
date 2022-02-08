@@ -9,64 +9,6 @@
   <script type="text/javascript" src="../node_modules/jszip/dist/jszip.min.js"></script>
   <script type="text/javascript" src="../node_modules/tiny-emitter/dist/tinyemitter.min.js"></script>
   <link rel="stylesheet" href="../node_modules/element-ui/lib/theme-chalk/index.css">
-
-  <script type="text/javascript">
-    function createImage(url) {
-
-      return new Promise(resolve => {
-        const img = new Image()
-        img.onload = resolve.bind(null, img)
-        img.onerror = resolve.bind(null, null)
-        img.src = url
-      })
-    }
-
-    const createUrl = (function () {
-      let url
-      return function (blob) {
-        url && URL.revokeObjectURL(url)
-        url = URL.createObjectURL(blob)
-        return url
-      }
-    })()
-
-    const sleep = time => new Promise(resolve => setTimeout(resolve, time))
-
-    const download = (href, filename) => {
-      const eleLink = document.createElement('a')
-      eleLink.download = filename
-      eleLink.href = href
-      eleLink.click()
-    }
-
-    const { Message, Loading } = ELEMENT
-    const error = Message.error
-
-    const loading = msg => {
-      const ins = Loading.service({
-        fullscreen: true,
-        text: msg,
-      })
-
-      return ins.close.bind(ins)
-    }
-
-  </script>
-
-  <script type="text/javascript">
-    const event_bus = new TinyEmitter()
-
-    function listen() {
-      if (!window.utools) return
-      utools.onPluginEnter(() => {
-        console.log('enter!', utools.getCopyedFiles())
-        event_bus.emit('enter')
-      })
-    }
-
-    listen()
-  </script>
-
   <style>
     [v-cloak] {
       display: none;
@@ -149,10 +91,98 @@
     }
   </style>
 
+  <!-- region tools -->
+  <script type="text/javascript">
+    function createImage(url) {
+
+      return new Promise(resolve => {
+        const img = new Image()
+        img.onload = resolve.bind(null, img)
+        img.onerror = resolve.bind(null, null)
+        img.src = url
+      })
+    }
+
+    const createUrl = (function () {
+      let url
+      return function (blob) {
+        url && URL.revokeObjectURL(url)
+        url = URL.createObjectURL(blob)
+        return url
+      }
+    })()
+
+    function dataURItoBlob(dataURI) {
+      var mimeString = dataURI.split(',')[0].split(':')[1].split(';')[0] // mime类型
+      var byteString = atob(dataURI.split(',')[1]) //base64 解码
+      var arrayBuffer = new ArrayBuffer(byteString.length) //创建缓冲数组
+      var intArray = new Uint8Array(arrayBuffer) //创建视图
+
+      for (var i = 0; i < byteString.length; i++) {
+        intArray[i] = byteString.charCodeAt(i)
+      }
+      return new Blob([intArray], { type: mimeString })
+    }
+
+    const sleep = time => new Promise(resolve => setTimeout(resolve, time))
+
+    const download = (href, filename) => {
+      const eleLink = document.createElement('a')
+      eleLink.download = filename
+      eleLink.href = href
+      eleLink.click()
+    }
+
+    const { Message, Loading } = ELEMENT
+    const error = Message.error
+
+    const loading = msg => {
+      const ins = Loading.service({
+        fullscreen: true,
+        text: msg,
+      })
+
+      return ins.close.bind(ins)
+    }
+
+  </script>
+  <!-- endregion -->
+  <!-- region node modules -->
+  <script type="text/javascript">
+    const event_bus = new TinyEmitter()
+
+    function listen() {
+      if (!window.utools) return
+      if (!window.tools) return
+      utools.onPluginEnter(async () => {
+        try {
+          const [gif] = utools.getCopyedFiles()
+          if (!gif || !gif.isFile) return error('仅支持GIF图片')
+          const { path, name } = gif
+          if (!/\.gif/i.test(name)) return error('仅支持GIF图片')
+          const base64 = await tools.readFile(path)
+
+          const blob = dataURItoBlob(base64)
+
+          const file = new File([blob], name, { type: 'image/gif' })
+
+          event_bus.emit('enter', { file })
+        } catch (e) {
+          console.log('error', e)
+        }
+
+      })
+    }
+
+    listen()
+  </script>
+  <!--endregion-->
+  <!--  region gif/zip module -->
   <script type="text/javascript">
     async function getGIFFrames(url) {
       const list = []
       const bucket = document.createElement('div')
+      bucket.id = 'bucket'
       const img = new Image()
       bucket.appendChild(img)
       document.body.appendChild(bucket)
@@ -193,7 +223,7 @@
       URL.revokeObjectURL(eleLink.href)
     }
   </script>
-
+  <!-- endregion -->
 </head>
 <body>
 
@@ -261,6 +291,12 @@
 
     created() {
       this.listenKeyPress()
+      event_bus.on('enter', ({ file }) => {
+        console.log('enter')
+        if (!file) return error('仅支持GIF图片')
+        this.handleGIFFile(file)
+        console.log('enter with file', file)
+      })
     },
 
     methods: {
@@ -348,24 +384,30 @@
         if (!file) return
         if (!/\.gif$/.test(file.name)) return error('仅支持GIF图片')
 
-        const close = loading('处理中...')
         this.handleGIFFile(file)
             .finally(() => {
               e.target.value = null
-              close()
             })
       },
 
       async handleGIFFile(file) {
-        const url = createUrl(file)
-        const img = await createImage(url)
-        if (img) {
-          this.ratio = img.width / img.height
+        const close = loading('处理中...')
+
+        try {
+          const url = createUrl(file)
+          const img = await createImage(url)
+          if (img) {
+            this.ratio = img.width / img.height
+          }
+
+          this.imgList = await getGIFFrames(url)
+          this.current = 0
+          this.playing = true
+        } catch (e) {
         }
 
-        this.imgList = await getGIFFrames(url)
-        this.current = 0
-        this.playing = true
+        close()
+
       },
 
       async downloadFrames() {
